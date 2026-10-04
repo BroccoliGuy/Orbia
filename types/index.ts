@@ -24,6 +24,7 @@ export type PanelId =
   | "data"
   | "terrain"
   | "climate"
+  | "temperature"
   | "population"
   | "hydro";
 
@@ -115,8 +116,11 @@ export interface EarthExplorerState {
   zoom: number;
   cameraDistance: number;
   heading: number;
+  viewLat: number;
+  viewLon: number;
   cursor: CursorState;
   pointerOverGlobe: boolean;
+  hover: { name: string; detail: string; x: number; y: number } | null;
   activePanel: PanelId | null;
   cinematic: boolean;
   railCollapsed: boolean;

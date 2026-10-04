@@ -26,9 +26,11 @@ const initialLayers: EarthExplorerState["layers"] = {
 
 type Actions = {
   setCursor: (cursor: EarthExplorerState["cursor"], over?: boolean) => void;
+  setHover: (hover: EarthExplorerState["hover"]) => void;
   setZoom: (zoom: number) => void;
   setCameraDistance: (cameraDistance: number) => void;
   setHeading: (heading: number) => void;
+  setView: (lat: number, lon: number) => void;
   setLayer: (key: LayerKey, value: boolean) => void;
   togglePanel: (panel: PanelId) => void;
   closePanel: () => void;
@@ -38,6 +40,9 @@ type Actions = {
   setDataset: (dataset: Dataset | null) => void;
   setReliefMode: (reliefMode: EarthExplorerState["reliefMode"]) => void;
   setReliefExaggeration: (reliefExaggeration: number) => void;
+  setShowAltitude: (showAltitude: boolean) => void;
+  setShowPeaks: (showPeaks: boolean) => void;
+  setShowDepths: (showDepths: boolean) => void;
   selectLocation: (location: GeoLocation | null) => void;
   setDetailOpen: (detailOpen: boolean) => void;
   flyTo: (lat: number, lon: number, zoom?: number) => void;
@@ -63,10 +68,13 @@ export const useEarthStore = create<EarthExplorerState & Actions>((set, get) => 
   showPeaks: true,
   showDepths: true,
   zoom: 0,
-  cameraDistance: 3.15,
+  cameraDistance: 3.35,
   heading: 0,
+  viewLat: 16,
+  viewLon: 18,
   cursor: { lat: 0, lon: 0, altitude: 0 },
   pointerOverGlobe: false,
+  hover: null,
   activePanel: null,
   cinematic: false,
   railCollapsed: false,
@@ -77,9 +85,11 @@ export const useEarthStore = create<EarthExplorerState & Actions>((set, get) => 
 
   setCursor: (cursor, over) =>
     set({ cursor, pointerOverGlobe: over ?? true }),
+  setHover: (hover) => set({ hover }),
   setZoom: (zoom) => set({ zoom }),
   setCameraDistance: (cameraDistance) => set({ cameraDistance }),
   setHeading: (heading) => set({ heading }),
+  setView: (viewLat, viewLon) => set({ viewLat, viewLon }),
   setLayer: (key, value) =>
     set((state) => ({ layers: { ...state.layers, [key]: value } })),
   togglePanel: (panel) =>
@@ -103,6 +113,9 @@ export const useEarthStore = create<EarthExplorerState & Actions>((set, get) => 
       },
     })),
   setReliefExaggeration: (reliefExaggeration) => set({ reliefExaggeration }),
+  setShowAltitude: (showAltitude) => set({ showAltitude }),
+  setShowPeaks: (showPeaks) => set({ showPeaks }),
+  setShowDepths: (showDepths) => set({ showDepths }),
   selectLocation: (selectedLocation) =>
     set({ selectedLocation, detailOpen: false }),
   setDetailOpen: (detailOpen) => set({ detailOpen }),

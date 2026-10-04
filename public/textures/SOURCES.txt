@@ -1,0 +1,6 @@
+earth-day.jpg, earth-night.jpg, earth-topology.png
+  three-globe example images (unpkg three-globe@2.45.2/example/img)
+  Blue Marble, city lights and elevation. NASA imagery, public domain.
+
+Nuages
+  Couche procédurale dans le shader, sans texture externe.
