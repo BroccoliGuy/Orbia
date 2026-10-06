@@ -44,6 +44,51 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
+.orb-range {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 14px;
+  background: transparent;
+  cursor: pointer;
+  touch-action: none;
+}
+
+.orb-range:focus {
+  outline: none;
+}
+
+.orb-range::-webkit-slider-runnable-track {
+  height: 2px;
+  background: #f5f7fa;
+  border-radius: 999px;
+}
+
+.orb-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  margin-top: -6px;
+  border: none;
+  border-radius: 999px;
+  background: #f5f7fa;
+}
+
+.orb-range::-moz-range-track {
+  height: 2px;
+  background: #f5f7fa;
+  border: none;
+  border-radius: 999px;
+}
+
+.orb-range::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border: none;
+  border-radius: 999px;
+  background: #f5f7fa;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

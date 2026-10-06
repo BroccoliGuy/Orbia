@@ -1,34 +1,48 @@
 "use client";
 
-import { useFrame, useThree } from "@react-three/fiber";
+import { useFrame, useThree, type ThreeEvent } from "@react-three/fiber";
 import { useMemo, useRef } from "react";
-import { InstancedMesh, Object3D, SphereGeometry, MeshBasicMaterial } from "three";
-import { CITIES, LAKES, PEAKS, RIVERS } from "@/data/features";
-import { latLonToVector3 } from "@/lib/geo";
-import { geometryFromPositions, polylinePositions } from "@/lib/lines";
+import { InstancedMesh, Object3D, SphereGeometry, MeshBasicMaterial, LineBasicMaterial } from "three";
+import { CITIES, LAKES, PEAKS, RIVERS, cityHeadline, type LineFeature, type PointFeature } from "@/data/features";
+import { polylinePositions } from "@/lib/lines";
+import { placedPoint } from "@/lib/projections";
 import { useEarthStore } from "@/store/earthStore";
-import type { GeoLocation } from "@/types";
+import type { GeoLocation, Projection } from "@/types";
+import { MorphedLines } from "./MorphedLines";
 
 function MarkerCloud({
   items,
   color,
   radius,
+  onPick,
 }: {
-  items: { lat: number; lon: number; scale: number }[];
+  items: (PointFeature & { scale: number })[];
   color: string;
   radius: number;
+  onPick: (item: PointFeature) => void;
 }) {
   const mesh = useRef<InstancedMesh>(null);
   const dummy = useMemo(() => new Object3D(), []);
   const { camera } = useThree();
   const geometry = useMemo(() => new SphereGeometry(radius, 8, 8), [radius]);
   const material = useMemo(() => new MeshBasicMaterial({ color }), [color]);
+  const signature = useRef("");
+  const flat = useRef<Exclude<Projection, "globe">>("mercator");
 
   useFrame(() => {
     if (!mesh.current) return;
-    const zoomScale = Math.max(0.12, Math.min(1, (camera.position.length() - 1.02) / 2.2));
+    const state = useEarthStore.getState();
+    if (state.projection !== "globe") flat.current = state.projection;
+    const distance = camera.position.length();
+    let identity = "";
+    for (const item of items) identity += item.id;
+    const key = `${flat.current}:${state.projectionMix.toFixed(3)}:${distance.toFixed(3)}:${identity}`;
+    if (key === signature.current) return;
+    signature.current = key;
+    const zoomScale = Math.max(0.12, Math.min(1, (distance - 1.02) / 2.2));
+    const projection = state.projection === "globe" ? flat.current : state.projection;
     items.forEach((item, index) => {
-      const point = latLonToVector3(item.lat, item.lon, 1.012);
+      const point = placedPoint(item.lat, item.lon, 1.012, projection, state.projectionMix);
       dummy.position.set(point.x, point.y, point.z);
       dummy.scale.setScalar(item.scale * zoomScale);
       dummy.updateMatrix();
@@ -38,7 +52,43 @@ function MarkerCloud({
   });
 
   if (items.length === 0) return null;
-  return <instancedMesh ref={mesh} args={[geometry, material, items.length]} />;
+  return (
+    <instancedMesh
+      ref={mesh}
+      args={[geometry, material, items.length]}
+      onClick={(event) => {
+        if (event.delta > 6) return;
+        const item = items[event.instanceId ?? -1];
+        if (!item) return;
+        event.stopPropagation();
+        onPick(item);
+      }}
+    />
+  );
+}
+
+function nearestFeature(features: LineFeature[], event: ThreeEvent<MouseEvent>) {
+  const state = useEarthStore.getState();
+  const projection = state.projection === "globe" ? "mercator" : state.projection;
+  const mix = state.projection === "globe" ? 0 : state.projectionMix;
+  const local = event.object.worldToLocal(event.point.clone());
+  let best = features[0];
+  let bestDistance = Number.POSITIVE_INFINITY;
+  let lat = best.points[0]?.[1] ?? 0;
+  let lon = best.points[0]?.[0] ?? 0;
+  for (const feature of features) {
+    for (const [featureLon, featureLat] of feature.points) {
+      const placed = placedPoint(featureLat, featureLon, 1.008, state.projection === "globe" ? projection : state.projection, mix);
+      const distance = (placed.x - local.x) ** 2 + (placed.y - local.y) ** 2 + (placed.z - local.z) ** 2;
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        best = feature;
+        lat = featureLat;
+        lon = featureLon;
+      }
+    }
+  }
+  return { feature: best, lat, lon };
 }
 
 export function Markers() {
@@ -49,127 +99,103 @@ export function Markers() {
   const flyTo = useEarthStore((state) => state.flyTo);
 
   const cities = CITIES.filter((city) => {
-    if (city.capital && layers.capitals) return true;
+    if (city.capital && layers.capitals && (city.rank <= 2 || zoom >= 2)) return true;
     if (!layers.cities) return false;
     if (zoom < 2) return city.rank === 1;
     return true;
-  }).map((city) => ({ lat: city.lat, lon: city.lon, scale: city.capital ? 1.15 : 0.8 }));
+  }).map((city) => ({ ...city, scale: city.capital ? 1.15 : 0.8 }));
 
   const peaks = layers.mountains && showPeaks
-    ? PEAKS.filter((peak) => zoom >= 2 || peak.rank === 1).map((peak) => ({
-        lat: peak.lat,
-        lon: peak.lon,
-        scale: 1.3,
-      }))
+    ? PEAKS.filter((peak) => zoom >= 2 || peak.rank === 1).map((peak) => ({ ...peak, scale: 1.3 }))
     : [];
 
-  const riverGeometry = useMemo(
-    () => geometryFromPositions(polylinePositions(RIVERS.map((river) => river.points), 1.008)),
-    [],
-  );
-  const lakeGeometry = useMemo(
-    () => geometryFromPositions(polylinePositions(LAKES.map((lake) => lake.points), 1.008)),
-    [],
-  );
+  const riverPositions = useMemo(() => polylinePositions(RIVERS.map((river) => river.points), 1.008), []);
+  const lakePositions = useMemo(() => polylinePositions(LAKES.map((lake) => lake.points), 1.008), []);
+  const riverMaterial = useMemo(() => new LineBasicMaterial({ color: "#7ec8ff", transparent: true, opacity: 0.85 }), []);
+  const lakeMaterial = useMemo(() => new LineBasicMaterial({ color: "#49b7ff", transparent: true, opacity: 0.7 }), []);
 
   function choose(location: GeoLocation, zoomLevel: number) {
     selectLocation(location);
     flyTo(location.lat, location.lon, zoomLevel);
   }
 
+  function pickLine(features: LineFeature[], event: ThreeEvent<MouseEvent>, kind: GeoLocation["kind"], label: string) {
+    if (event.delta > 6 || features.length === 0) return;
+    event.stopPropagation();
+    const { feature, lat, lon } = nearestFeature(features, event);
+    choose(
+      {
+        id: feature.id,
+        kind,
+        name: feature.name,
+        subtitle: feature.subtitle,
+        lat,
+        lon,
+        primaryLabel: label,
+        primaryValue: feature.value,
+      },
+      3,
+    );
+  }
+
   return (
     <>
-      <MarkerCloud items={cities} color="#f5f7fa" radius={0.008} />
-      <MarkerCloud items={peaks} color="#ffb020" radius={0.01} />
+      <MarkerCloud
+        items={cities}
+        color="#f5f7fa"
+        radius={0.008}
+        onPick={(city) => {
+          const headline = cityHeadline(city);
+          choose(
+            {
+              id: city.id,
+              kind: "city",
+              name: city.name,
+              subtitle: city.subtitle,
+              lat: city.lat,
+              lon: city.lon,
+              countryId: city.countryId,
+              primaryLabel: headline.primaryLabel,
+              primaryValue: headline.primaryValue,
+            },
+            5,
+          );
+        }}
+      />
+      <MarkerCloud
+        items={peaks}
+        color="#ffb020"
+        radius={0.01}
+        onPick={(peak) =>
+          choose(
+            {
+              id: peak.id,
+              kind: "mountain",
+              name: peak.name,
+              subtitle: peak.subtitle,
+              lat: peak.lat,
+              lon: peak.lon,
+              primaryLabel: "Altitude",
+              primaryValue: peak.value,
+            },
+            5,
+          )
+        }
+      />
       {layers.rivers ? (
-        <lineSegments
-          geometry={riverGeometry}
-          onClick={(event) => {
-            event.stopPropagation();
-            const river = RIVERS[0];
-            choose(
-              {
-                id: river.id,
-                kind: "river",
-                name: river.name,
-                subtitle: river.subtitle,
-                lat: river.points[2][1],
-                lon: river.points[2][0],
-                primaryLabel: "Longueur",
-                primaryValue: river.value,
-              },
-              3,
-            );
-          }}
-        >
-          <lineBasicMaterial color="#7ec8ff" transparent opacity={0.85} />
-        </lineSegments>
+        <MorphedLines
+          positions={riverPositions}
+          material={riverMaterial}
+          onClick={(event) => pickLine(RIVERS, event, "river", "Longueur")}
+        />
       ) : null}
       {layers.lakes ? (
-        <lineSegments geometry={lakeGeometry}>
-          <lineBasicMaterial color="#49b7ff" transparent opacity={0.7} />
-        </lineSegments>
+        <MorphedLines
+          positions={lakePositions}
+          material={lakeMaterial}
+          onClick={(event) => pickLine(LAKES, event, "lake", "Étendue")}
+        />
       ) : null}
-      {CITIES.filter((city) => layers.cities || (city.capital && layers.capitals)).map((city) => (
-        <mesh
-          key={city.id}
-          position={[
-            latLonToVector3(city.lat, city.lon, 1.012).x,
-            latLonToVector3(city.lat, city.lon, 1.012).y,
-            latLonToVector3(city.lat, city.lon, 1.012).z,
-          ]}
-          onClick={(event) => {
-            event.stopPropagation();
-            choose(
-              {
-                id: city.id,
-                kind: "city",
-                name: city.name,
-                subtitle: city.subtitle,
-                lat: city.lat,
-                lon: city.lon,
-                primaryLabel: "Population",
-                primaryValue: city.value,
-              },
-              5,
-            );
-          }}
-        >
-          <sphereGeometry args={[0.012, 8, 8]} />
-          <meshBasicMaterial transparent opacity={0} depthWrite={false} />
-        </mesh>
-      ))}
-      {layers.mountains && showPeaks
-        ? PEAKS.map((peak) => (
-            <mesh
-              key={peak.id}
-              position={[
-                latLonToVector3(peak.lat, peak.lon, 1.016).x,
-                latLonToVector3(peak.lat, peak.lon, 1.016).y,
-                latLonToVector3(peak.lat, peak.lon, 1.016).z,
-              ]}
-              onClick={(event) => {
-                event.stopPropagation();
-                choose(
-                  {
-                    id: peak.id,
-                    kind: "mountain",
-                    name: peak.name,
-                    subtitle: peak.subtitle,
-                    lat: peak.lat,
-                    lon: peak.lon,
-                    primaryLabel: "Altitude",
-                    primaryValue: peak.value,
-                  },
-                  5,
-                );
-              }}
-            >
-              <sphereGeometry args={[0.016, 8, 8]} />
-              <meshBasicMaterial transparent opacity={0} depthWrite={false} />
-            </mesh>
-          ))
-        : null}
     </>
   );
 }

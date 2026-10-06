@@ -4,6 +4,7 @@ import dynamic from "next/dynamic";
 import { Suspense, useEffect } from "react";
 import { useViewUrl } from "@/components/useViewUrl";
 import { Overlay } from "@/components/ui/Overlay";
+import { Galaxy } from "@/components/ui/galaxy";
 import { Telemetry } from "@/components/ui/Telemetry";
 import { useEarthStore } from "@/store/earthStore";
 
@@ -28,6 +29,7 @@ export default function Explorer() {
   return (
     <main className="fixed inset-0 h-dvh w-screen overflow-hidden bg-background text-foreground">
       <h1 className="sr-only">Orbia</h1>
+      <Galaxy />
       <div className="absolute inset-0">
         <GlobeScene />
       </div>

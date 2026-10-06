@@ -79,6 +79,7 @@ export interface FlyTarget {
   lon: number;
   zoom: number;
   token: number;
+  keepDistance?: boolean;
 }
 
 export interface CountryRecord {
@@ -110,6 +111,7 @@ export interface EarthExplorerState {
   layers: Layers;
   reliefMode: "off" | "normal" | "exaggerated";
   reliefExaggeration: number;
+  viewTilt: number;
   showAltitude: boolean;
   showPeaks: boolean;
   showDepths: boolean;
@@ -120,7 +122,8 @@ export interface EarthExplorerState {
   viewLon: number;
   cursor: CursorState;
   pointerOverGlobe: boolean;
-  hover: { name: string; detail: string; x: number; y: number } | null;
+  showHover: boolean;
+  hover: { name: string; detail: string; x: number; y: number; countryId?: string } | null;
   activePanel: PanelId | null;
   cinematic: boolean;
   railCollapsed: boolean;

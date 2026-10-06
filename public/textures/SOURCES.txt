@@ -1,6 +1,20 @@
-earth-day.jpg, earth-night.jpg, earth-topology.png
-  three-globe example images (unpkg three-globe@2.45.2/example/img)
-  Blue Marble, city lights and elevation. NASA imagery, public domain.
+earth-day.jpg
+  NASA Visible Earth, Blue Marble (land, oceans), 8192×4096.
+  https://commons.wikimedia.org/wiki/File:Whole_world_-_land_and_oceans.jpg
+  Domaine public, NASA.
+
+earth-night.jpg
+  NASA Black Marble 2016, 3 km, ramené à 8192×4096.
+  https://eoimages.gsfc.nasa.gov/images/imagerecords/144000/144898/BlackMarble_2016_3km.jpg
+  Domaine public, NASA.
+
+earth-topology.png
+  three-globe example image (unpkg three-globe@2.45.2/example/img)
+  Élévation. NASA imagery, public domain.
+
+earth-bathymetry.png
+  GEBCO bathymetry, NASA Earth Observatory (Visible Earth). Public domain.
+  0 au rivage, 1 au fond des Mariannes, près de −10 935 m. Les terres sont masquées par earth-topology.png.
 
 Nuages
   Couche procédurale dans le shader, sans texture externe.

@@ -1,3 +1,5 @@
+import { WORLD_COUNTRIES, countryRecord, formatPeople } from "@/data/countries";
+import { CITIES, LAKES, OCEANS, PEAKS, RELIEF, RIVERS, SEAS, cityHeadline, interiorPoint } from "@/data/features";
 import type { GeoLocation } from "@/types";
 
 export interface GazetteerHit {
@@ -5,31 +7,165 @@ export interface GazetteerHit {
   zoom: number;
 }
 
-const PLACES: GazetteerHit[] = [
-  { zoom: 3, location: { id: "country-fr", kind: "country", name: "France", subtitle: "Europe", lat: 46.6, lon: 2.5, countryId: "250", primaryLabel: "Population", primaryValue: "68,4 M" } },
-  { zoom: 5, location: { id: "city-paris", kind: "city", name: "Paris", subtitle: "France · Île-de-France", lat: 48.8566, lon: 2.3522, countryId: "250", primaryLabel: "Population", primaryValue: "2,1 M" } },
-  { zoom: 5, location: { id: "mountain-mont-blanc", kind: "mountain", name: "Mont Blanc", subtitle: "Alpes", lat: 45.8326, lon: 6.8652, countryId: "250", primaryLabel: "Altitude", primaryValue: "4 810 m" } },
-  { zoom: 3, location: { id: "river-amazone", kind: "river", name: "Amazone", subtitle: "Amazonie", lat: -3.1, lon: -60.0, primaryLabel: "Longueur", primaryValue: "6 400 km" } },
-  { zoom: 3, location: { id: "country-us", kind: "country", name: "États-Unis", subtitle: "Amérique du Nord", lat: 39.8, lon: -98.5, countryId: "840", primaryLabel: "Population", primaryValue: "340 M" } },
-  { zoom: 5, location: { id: "city-new-york", kind: "city", name: "New York", subtitle: "États-Unis", lat: 40.7128, lon: -74.006, countryId: "840", primaryLabel: "Population", primaryValue: "8,3 M" } },
-  { zoom: 3, location: { id: "country-cn", kind: "country", name: "Chine", subtitle: "Asie", lat: 35.9, lon: 104.2, countryId: "156", primaryLabel: "Population", primaryValue: "1,41 Md" } },
-  { zoom: 3, location: { id: "country-br", kind: "country", name: "Brésil", subtitle: "Amérique du Sud", lat: -10.8, lon: -52.9, countryId: "076", primaryLabel: "Population", primaryValue: "212 M" } },
-  { zoom: 3, location: { id: "country-jp", kind: "country", name: "Japon", subtitle: "Asie", lat: 36.2, lon: 138.3, countryId: "392", primaryLabel: "Population", primaryValue: "124 M" } },
-  { zoom: 5, location: { id: "city-tokyo", kind: "city", name: "Tokyo", subtitle: "Japon", lat: 35.6762, lon: 139.6503, countryId: "392", primaryLabel: "Population", primaryValue: "14 M" } },
-  { zoom: 5, location: { id: "mountain-everest", kind: "mountain", name: "Everest", subtitle: "Himalaya", lat: 27.9881, lon: 86.925, primaryLabel: "Altitude", primaryValue: "8 849 m" } },
-  { zoom: 3, location: { id: "river-nil", kind: "river", name: "Nil", subtitle: "Afrique", lat: 15.6, lon: 32.5, primaryLabel: "Longueur", primaryValue: "6 650 km" } },
-  { zoom: 3, location: { id: "country-ma", kind: "country", name: "Maroc", subtitle: "Afrique", lat: 31.8, lon: -7.1, countryId: "504", primaryLabel: "Population", primaryValue: "37 M" } },
-  { zoom: 3, location: { id: "country-de", kind: "country", name: "Allemagne", subtitle: "Europe", lat: 51.2, lon: 10.4, countryId: "276", primaryLabel: "Population", primaryValue: "84 M" } },
-  { zoom: 5, location: { id: "city-london", kind: "city", name: "Londres", subtitle: "Royaume-Uni", lat: 51.5074, lon: -0.1278, countryId: "826", primaryLabel: "Population", primaryValue: "8,9 M" } },
-];
+const PLACES: GazetteerHit[] = [];
+const seen = new Set<string>();
+
+function add(hit: GazetteerHit) {
+  const key = `${hit.location.kind}:${hit.location.name.toLocaleLowerCase("fr")}`;
+  if (seen.has(key)) return;
+  seen.add(key);
+  PLACES.push(hit);
+}
+
+for (const country of WORLD_COUNTRIES) {
+  const record = countryRecord(country.id, country.name);
+  add({
+    zoom: 3,
+    location: {
+      id: country.id,
+      kind: "country",
+      name: record.name,
+      subtitle: record.continent,
+      lat: country.lat,
+      lon: country.lon,
+      countryId: country.id,
+      primaryLabel: "Population",
+      primaryValue: formatPeople(record.population),
+    },
+  });
+}
+
+for (const city of CITIES) {
+  const headline = cityHeadline(city);
+  add({
+    zoom: 5,
+    location: {
+      id: city.id,
+      kind: "city",
+      name: city.name,
+      subtitle: city.subtitle,
+      lat: city.lat,
+      lon: city.lon,
+      countryId: city.countryId,
+      primaryLabel: headline.primaryLabel,
+      primaryValue: headline.primaryValue,
+    },
+  });
+}
+
+for (const country of WORLD_COUNTRIES) {
+  const record = countryRecord(country.id, country.name);
+  if (!record.capital) continue;
+  add({
+    zoom: 5,
+    location: {
+      id: `capital-${country.iso2.toLowerCase() || country.id}`,
+      kind: "city",
+      name: record.capital,
+      subtitle: record.name,
+      lat: country.capitalLat,
+      lon: country.capitalLon,
+      countryId: country.id,
+      primaryLabel: "Capitale",
+      primaryValue: "Capitale",
+    },
+  });
+}
+
+for (const place of [...RELIEF, ...SEAS, ...OCEANS, ...PEAKS]) {
+  add({
+    zoom: 5,
+    location: {
+      id: place.id,
+      kind: "mountain",
+      name: place.name,
+      subtitle: place.subtitle,
+      lat: place.lat,
+      lon: place.lon,
+      primaryLabel: "Altitude",
+      primaryValue: place.value,
+    },
+  });
+}
+
+for (const lake of LAKES) {
+  const inside = interiorPoint(lake.points);
+  add({
+    zoom: 5,
+    location: {
+      id: lake.id,
+      kind: "lake",
+      name: lake.name,
+      subtitle: lake.subtitle,
+      lat: inside.lat,
+      lon: inside.lon,
+      primaryLabel: "Étendue",
+      primaryValue: lake.value,
+    },
+  });
+}
+
+const longestRivers = new Map<string, (typeof RIVERS)[number]>();
+for (const river of RIVERS) {
+  const key = river.name.toLocaleLowerCase("fr");
+  const current = longestRivers.get(key);
+  const length = Number(river.value.replace(/[^\d]/g, "")) || 0;
+  const currentLength = current ? Number(current.value.replace(/[^\d]/g, "")) || 0 : -1;
+  if (!current || length > currentLength) longestRivers.set(key, river);
+}
+
+for (const river of longestRivers.values()) {
+  const middle = river.points[Math.floor(river.points.length / 2)] ?? river.points[0];
+  if (!middle) continue;
+  add({
+    zoom: 3,
+    location: {
+      id: river.id,
+      kind: "river",
+      name: river.name,
+      subtitle: river.subtitle,
+      lat: middle[1],
+      lon: middle[0],
+      primaryLabel: "Longueur",
+      primaryValue: river.value,
+    },
+  });
+}
 
 export function searchGazetteer(query: string) {
-  const needle = query.trim().toLocaleLowerCase("fr");
+  const needle = fold(query.trim());
   if (needle.length < 2) return [];
-  return PLACES.filter((place) => {
-    const haystack = `${place.location.name} ${place.location.subtitle ?? ""}`.toLocaleLowerCase("fr");
-    return haystack.includes(needle);
-  }).slice(0, 6);
+  return PLACES.flatMap((place) => {
+    const rank = matchRank(place, needle);
+    return rank === null ? [] : [{ place, rank }];
+  })
+    .sort((a, b) => score(a.place, a.rank) - score(b.place, b.rank))
+    .slice(0, 6)
+    .map((item) => item.place);
+}
+
+function fold(text: string) {
+  return text.toLocaleLowerCase("fr").normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+}
+
+function words(text: string) {
+  return fold(text).split(/[\s'’\-·]+/).filter(Boolean);
+}
+
+function matchRank(place: GazetteerHit, needle: string) {
+  const name = fold(place.location.name);
+  const nameWords = words(place.location.name);
+  const subtitleWords = words(place.location.subtitle ?? "");
+  if (name === needle) return 0;
+  if (name.startsWith(needle)) return 1;
+  if (nameWords.some((word) => word === needle) || subtitleWords.some((word) => word === needle)) return 2;
+  if (nameWords.some((word) => word.startsWith(needle)) || subtitleWords.some((word) => word.startsWith(needle))) return 3;
+  return null;
+}
+
+function score(place: GazetteerHit, text: number) {
+  const relief = place.location.kind === "mountain" ? 0 : place.location.kind === "country" ? 2 : 1;
+  return relief * 10 + text;
 }
 
 export function gazetteerPlaces() {

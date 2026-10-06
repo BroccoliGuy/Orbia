@@ -8,8 +8,10 @@ export const earthRefs: {
   geometry: BufferGeometry | null;
   material: ShaderMaterial | null;
   heat: DataTexture | null;
+  heatEpoch: number;
 } = {
   geometry: null,
   material: null,
   heat: null,
+  heatEpoch: 0,
 };

@@ -2,7 +2,8 @@
 
 import { useSearchParams } from "next/navigation";
 import { useEffect, useRef } from "react";
-import { countryRecord, formatPeople, hasCountryData } from "@/data/countries";
+import { countryIdByCode, countryRecord, formatPeople, hasCountryData } from "@/data/countries";
+import { countryFocus, findCountryById, loadCountries } from "@/lib/world";
 import { useEarthStore } from "@/store/earthStore";
 import type { Dataset, Projection, StyleMode } from "@/types";
 
@@ -48,49 +49,28 @@ export function useViewUrl() {
       store.flyTo(lat, lon, Number.isFinite(zoom) ? zoom : 4);
     }
     if (country) {
-      const match = Object.values({
-        fr: "250",
-        us: "840",
-        cn: "156",
-        br: "076",
-        jp: "392",
-        de: "276",
-        ma: "504",
-      })[0];
-      const id = {
-        fr: "250",
-        us: "840",
-        cn: "156",
-        br: "076",
-        jp: "392",
-        de: "276",
-        ma: "504",
-        in: "356",
-        ru: "643",
-        gb: "826",
-      }[country.toLowerCase()];
+      const id = countryIdByCode(country);
       if (id && hasCountryData(id)) {
-        const record = countryRecord(id);
-        store.selectLocation({
-          id,
-          kind: "country",
-          name: record.name,
-          subtitle: record.continent,
-          lat: record.name === "France" ? 46.6 : lat || 20,
-          lon: record.name === "France" ? 2.5 : lon || 10,
-          countryId: id,
-          primaryLabel: "Population",
-          primaryValue: formatPeople(record.population),
-          details: [
-            { label: "Capitale", value: record.capital },
-            { label: "Superficie", value: `${record.area.toLocaleString("fr-FR")} km²` },
-            { label: "Altitude moyenne", value: `${record.averageElevation.toLocaleString("fr-FR")} m` },
-            { label: "Climat", value: `${record.temperature.toLocaleString("fr-FR")} °C` },
-          ],
+        void loadCountries().then((features) => {
+          const match = findCountryById(features, id);
+          const focus = match ? countryFocus(match) : { lat: 0, lon: 0 };
+          const focusLat = Number.isFinite(focus.lat) ? focus.lat : 0;
+          const focusLon = Number.isFinite(focus.lon) ? focus.lon : 0;
+          const record = countryRecord(id);
+          store.selectLocation({
+            id,
+            kind: "country",
+            name: record.name,
+            subtitle: record.continent,
+            lat: focusLat,
+            lon: focusLon,
+            countryId: id,
+            primaryLabel: "Population",
+            primaryValue: formatPeople(record.population),
+          });
+          if (!Number.isFinite(lat)) store.flyTo(focusLat, focusLon, Number.isFinite(zoom) ? zoom : 3);
         });
-        if (!Number.isFinite(lat)) store.flyTo(record.name === "France" ? 46.6 : 20, record.name === "France" ? 2.5 : 10, 3);
       }
-      void match;
     }
   }, [params]);
 
@@ -102,7 +82,10 @@ export function useViewUrl() {
       if (state.projection !== "globe") next.set("projection", state.projection);
       if (state.style !== "realistic") next.set("style", state.style);
       if (state.dataset) next.set("data", state.dataset);
-      if (state.selectedLocation?.countryId === "250") next.set("country", "fr");
+      if (state.selectedLocation?.kind === "country" && state.selectedLocation.countryId) {
+        const code = countryRecord(state.selectedLocation.countryId).iso2.toLowerCase();
+        if (code) next.set("country", code);
+      }
       if (state.zoom > 0) {
         next.set("lat", state.viewLat.toFixed(4));
         next.set("lon", state.viewLon.toFixed(4));

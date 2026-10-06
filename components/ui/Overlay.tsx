@@ -1,15 +1,11 @@
 "use client";
 
-import { Compass } from "@/components/ui/Compass";
-import { PlaceCard } from "@/components/ui/PlaceCard";
-import { QuickStyleCard } from "@/components/ui/QuickStyleCard";
-import { SidePanel } from "@/components/ui/SidePanel";
-import { SideRail } from "@/components/ui/SideRail";
-import { TopBar } from "@/components/ui/TopBar";
-import { Legend } from "@/components/ui/Legend";
+import { X } from "lucide-react";
 import { Hotkeys } from "@/components/ui/Hotkeys";
+import { ReliefSlider } from "@/components/ui/ReliefSlider";
+import { TiltSlider } from "@/components/ui/TiltSlider";
+import { TopBar } from "@/components/ui/TopBar";
 import { Tooltip } from "@/components/ui/Tooltip";
-import { ZoomControls } from "@/components/ui/ZoomControls";
 import { useIdleChrome } from "@/components/ui/useChrome";
 import { useEarthStore } from "@/store/earthStore";
 
@@ -22,21 +18,19 @@ export function Overlay() {
       {cinematic ? (
         <button
           type="button"
+          aria-label="Quitter"
           onClick={() => useEarthStore.getState().setCinematic(false)}
-          className="glass absolute top-4 right-4 z-40 rounded-full px-3 py-1.5 text-[12px] text-secondary"
+          className="absolute top-4 right-4 z-40 grid h-9 w-9 place-items-center text-foreground [filter:drop-shadow(0_1px_2px_rgb(0_0_0/0.9))]"
         >
-          Quitter
+          <X size={16} strokeWidth={1.5} />
         </button>
       ) : (
         <>
           <TopBar />
-          <SideRail />
-          <SidePanel />
-          <QuickStyleCard />
-          <Compass />
-          <ZoomControls />
-          <PlaceCard />
-          <Legend />
+          <div className="pointer-events-auto absolute right-3 bottom-5 z-30 flex items-end gap-4 sm:right-5">
+            <ReliefSlider />
+            <TiltSlider />
+          </div>
           <Tooltip />
         </>
       )}

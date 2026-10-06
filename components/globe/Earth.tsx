@@ -1,7 +1,7 @@
 "use client";
 
 import { useTexture } from "@react-three/drei";
-import { useFrame, type ThreeEvent } from "@react-three/fiber";
+import { useFrame, useThree, type ThreeEvent } from "@react-three/fiber";
 import { useEffect, useMemo, useRef } from "react";
 import {
   DataTexture,
@@ -14,30 +14,29 @@ import {
   RGBAFormat,
   ShaderMaterial,
   Vector3,
+  Vector4,
 } from "three";
-import { countryRecord, formatPeople, hasCountryData } from "@/data/countries";
+import { hasCountryData } from "@/data/countries";
 import { earthRefs, HEAT_HEIGHT, HEAT_WIDTH, heatPixels } from "@/lib/earthRefs";
-import { loadElevationGrid, sampleAltitude } from "@/lib/elevation";
+import { loadElevationGrid, reliefDisplacement, sampleAltitude, SEA_LEVEL, EVEREST_SAMPLE, DEPTH_SCALE } from "@/lib/elevation";
 import { createEarthGeometry } from "@/lib/geometry";
 import { vector3ToLatLon } from "@/lib/geo";
+import { describePlace, selectionFromPlace } from "@/lib/place";
 import { sunDirection } from "@/lib/sun";
-import { countryFocus, findCountry, loadCountries, type CountryFeature } from "@/lib/world";
+import { findCountry, loadCountries, type CountryFeature } from "@/lib/world";
 import { lodSegments } from "@/lib/zoom";
 import { earthFragment, earthVertex } from "@/shaders/earth";
 import { useEarthStore } from "@/store/earthStore";
-
-function displacementOf(mode: "off" | "normal" | "exaggerated", amount: number, enabled: boolean) {
-  if (!enabled || mode === "off") return 0;
-  if (mode === "exaggerated") return 0.045 * amount;
-  return 0.028;
-}
+import { useDetailImagery } from "./useDetailImagery";
 
 export function Earth() {
-  const [day, night, elevation] = useTexture([
+  const [day, night, elevation, bathymetry] = useTexture([
     "/textures/earth-day.jpg",
     "/textures/earth-night.jpg",
     "/textures/earth-topology.png",
+    "/textures/earth-bathymetry.png",
   ]);
+  const gl = useThree((state) => state.gl);
   const mesh = useRef<Mesh>(null);
   const countries = useRef<CountryFeature[]>([]);
   const zoom = useEarthStore((state) => state.zoom);
@@ -45,15 +44,23 @@ export function Earth() {
   const segments = style === "low-poly" ? { width: 28, height: 16 } : lodSegments(zoom);
 
   useEffect(() => {
-    for (const texture of [day, night, elevation]) {
+    const anisotropy = gl.capabilities.getMaxAnisotropy();
+    for (const texture of [day, night]) {
       texture.colorSpace = LinearSRGBColorSpace;
-      texture.anisotropy = 8;
+      texture.anisotropy = anisotropy;
+      texture.needsUpdate = true;
     }
+    elevation.colorSpace = NoColorSpace;
+    elevation.anisotropy = 1;
+    elevation.needsUpdate = true;
+    bathymetry.colorSpace = NoColorSpace;
+    bathymetry.anisotropy = 1;
+    bathymetry.needsUpdate = true;
     void loadElevationGrid();
     void loadCountries().then((features) => {
       countries.current = features;
     });
-  }, [day, night, elevation]);
+  }, [day, night, elevation, bathymetry, gl]);
 
   const heat = useMemo(() => {
     const texture = new DataTexture(heatPixels, HEAT_WIDTH, HEAT_HEIGHT, RGBAFormat);
@@ -74,6 +81,7 @@ export function Earth() {
   useEffect(() => {
     earthRefs.geometry = geometry;
     return () => {
+      geometry.dispose();
       if (earthRefs.geometry === geometry) earthRefs.geometry = null;
     };
   }, [geometry]);
@@ -84,29 +92,39 @@ export function Earth() {
         uDay: { value: day },
         uNight: { value: night },
         uElevation: { value: elevation },
+        uBathymetry: { value: bathymetry },
         uHeat: { value: heat },
         uSun: { value: new Vector3(1, 0, 0) },
         uNightLights: { value: 1 },
         uDisplacement: { value: 0.028 },
+        uSea: { value: SEA_LEVEL },
+        uEverest: { value: EVEREST_SAMPLE },
+        uDepthScale: { value: DEPTH_SCALE },
         uMorph: { value: 0 },
         uLowPoly: { value: 0 },
         uHeatMix: { value: 0 },
+        uDetailDay: { value: heat },
+        uDetailNight: { value: heat },
+        uDetailBounds: { value: new Vector4(0, 0, 1, 1) },
+        uDetailMix: { value: 0 },
       },
       vertexShader: earthVertex,
       fragmentShader: earthFragment,
       side: DoubleSide,
     });
-  }, [day, night, elevation, heat, earthFragment]);
+  }, [day, night, elevation, bathymetry, heat, earthFragment]);
 
   useEffect(() => {
     earthRefs.material = material;
   }, [material]);
 
+  useDetailImagery(material);
+
   useFrame((_, delta) => {
     const state = useEarthStore.getState();
     material.uniforms.uSun.value.copy(sunDirection);
     material.uniforms.uNightLights.value = state.layers.nightLights ? 1 : 0;
-    material.uniforms.uDisplacement.value = displacementOf(
+    material.uniforms.uDisplacement.value = reliefDisplacement(
       state.reliefMode,
       state.reliefExaggeration,
       state.layers.relief,
@@ -116,6 +134,10 @@ export function Earth() {
       ? lowTarget
       : MathUtils.damp(material.uniforms.uLowPoly.value as number, lowTarget, 3, delta);
     material.uniforms.uHeat.value = heat;
+    if (material.userData.heatEpoch !== earthRefs.heatEpoch) {
+      heat.needsUpdate = true;
+      material.userData.heatEpoch = earthRefs.heatEpoch;
+    }
     material.uniforms.uHeatMix.value = state.dataset ? 1 : 0;
   });
 
@@ -127,7 +149,11 @@ export function Earth() {
     let altitude = sampleAltitude(lat, lon);
     if (!store.showAltitude || (!store.showDepths && altitude < 0)) altitude = 0;
     store.setCursor({ lat, lon, altitude }, true);
-    return { lat, lon, match: findCountry(countries.current, lon, lat) };
+    return { lat, lon, altitude, store };
+  }
+
+  function placeAt(lat: number, lon: number, altitude: number, match: ReturnType<typeof findCountry>) {
+    return describePlace(lat, lon, altitude, match);
   }
 
   return (
@@ -136,48 +162,25 @@ export function Earth() {
       geometry={geometry}
       material={material}
       onPointerMove={(event) => {
-        const { match } = readPointer(event);
-        if (!match) {
-          useEarthStore.getState().setHover(null);
-          return;
-        }
-        const id = String(match.id ?? "");
-        const name = match.properties?.name ?? "Région";
-        const record = countryRecord(id, name);
-        useEarthStore.getState().setHover({
-          name: record.name,
-          detail: hasCountryData(id) ? formatPeople(record.population) : "",
+        const { lat, lon, altitude, store } = readPointer(event);
+        if (!store.showHover) return;
+        const match = findCountry(countries.current, lon, lat);
+        const place = placeAt(lat, lon, altitude, match);
+        store.setHover({
+          name: place.name,
+          countryId: place.record && hasCountryData(place.id) ? place.id : undefined,
+          detail: place.meters,
           x: event.nativeEvent.clientX,
           y: event.nativeEvent.clientY,
         });
       }}
       onClick={(event) => {
-        const { lat, lon, match } = readPointer(event);
-        if (!match) return;
-        const id = String(match.id ?? "");
-        const name = match.properties?.name ?? "Région";
-        const record = countryRecord(id, name);
-        const focus = countryFocus(match);
-        useEarthStore.getState().selectLocation({
-          id,
-          kind: "country",
-          name: record.name,
-          subtitle: record.continent || name,
-          lat: Number.isFinite(focus.lat) ? focus.lat : lat,
-          lon: Number.isFinite(focus.lon) ? focus.lon : lon,
-          countryId: id,
-          primaryLabel: "Population",
-          primaryValue: formatPeople(record.population),
-          details: hasCountryData(id)
-            ? [
-                { label: "Capitale", value: record.capital },
-                { label: "Superficie", value: `${record.area.toLocaleString("fr-FR")} km²` },
-                { label: "Altitude moyenne", value: `${Math.round(record.averageElevation).toLocaleString("fr-FR")} m` },
-                { label: "Climat", value: `${record.temperature.toLocaleString("fr-FR")} °C` },
-              ]
-            : [],
-        });
-        useEarthStore.getState().flyTo(Number.isFinite(focus.lat) ? focus.lat : lat, Number.isFinite(focus.lon) ? focus.lon : lon, 3);
+        if (event.delta > 6) return;
+        const { lat, lon, altitude, store } = readPointer(event);
+        const match = findCountry(countries.current, lon, lat);
+        const place = placeAt(lat, lon, altitude, match);
+        store.selectLocation(selectionFromPlace(lat, lon, place));
+        store.flyTo(lat, lon, store.zoom, true);
       }}
       onPointerOut={() => {
         useEarthStore.setState({ pointerOverGlobe: false, hover: null });

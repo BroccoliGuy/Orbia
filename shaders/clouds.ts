@@ -42,10 +42,11 @@ export const cloudsFragment = /* glsl */ `
   }
 
   void main() {
-    vec2 uv = vUv + vec2(uTime * 0.002, 0.0);
-    float band = sin((vUv.y - 0.5) * 3.14159);
-    float field = fbm(uv * vec2(14.0, 7.0));
-    float mask = smoothstep(0.52, 0.74, field) * smoothstep(0.0, 0.25, abs(band));
+    vec3 n = normalize(vNormal);
+    vec2 drift = vec2(uTime * 0.002, 0.0);
+    float field = fbm(n.xy * 7.0 + drift) * 0.5 + fbm(n.yz * 6.0 - drift) * 0.5;
+    float band = sqrt(max(0.0, 1.0 - n.y * n.y));
+    float mask = smoothstep(0.52, 0.74, field) * smoothstep(0.0, 0.35, band);
     float sun = smoothstep(-0.2, 0.6, dot(normalize(vNormal), normalize(uSun)));
     float alpha = mask * (0.12 + 0.38 * sun);
     gl_FragColor = vec4(vec3(0.96, 0.98, 1.0), alpha);

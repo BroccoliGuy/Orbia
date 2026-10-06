@@ -11,6 +11,13 @@ import type {
   StyleMode,
 } from "@/types";
 
+let flySerial = 0;
+
+function nextFlyToken() {
+  flySerial += 1;
+  return flySerial;
+}
+
 const initialLayers: EarthExplorerState["layers"] = {
   borders: true,
   coasts: true,
@@ -27,6 +34,7 @@ const initialLayers: EarthExplorerState["layers"] = {
 type Actions = {
   setCursor: (cursor: EarthExplorerState["cursor"], over?: boolean) => void;
   setHover: (hover: EarthExplorerState["hover"]) => void;
+  toggleShowHover: () => void;
   setZoom: (zoom: number) => void;
   setCameraDistance: (cameraDistance: number) => void;
   setHeading: (heading: number) => void;
@@ -40,12 +48,13 @@ type Actions = {
   setDataset: (dataset: Dataset | null) => void;
   setReliefMode: (reliefMode: EarthExplorerState["reliefMode"]) => void;
   setReliefExaggeration: (reliefExaggeration: number) => void;
+  setViewTilt: (viewTilt: number) => void;
   setShowAltitude: (showAltitude: boolean) => void;
   setShowPeaks: (showPeaks: boolean) => void;
   setShowDepths: (showDepths: boolean) => void;
   selectLocation: (location: GeoLocation | null) => void;
   setDetailOpen: (detailOpen: boolean) => void;
-  flyTo: (lat: number, lon: number, zoom?: number) => void;
+  flyTo: (lat: number, lon: number, zoom?: number, keepDistance?: boolean) => void;
   clearFlyTarget: () => void;
   setCinematic: (cinematic: boolean) => void;
   toggleCinematic: () => void;
@@ -64,6 +73,7 @@ export const useEarthStore = create<EarthExplorerState & Actions>((set, get) => 
   layers: initialLayers,
   reliefMode: "normal",
   reliefExaggeration: 1.4,
+  viewTilt: 0,
   showAltitude: true,
   showPeaks: true,
   showDepths: true,
@@ -74,6 +84,7 @@ export const useEarthStore = create<EarthExplorerState & Actions>((set, get) => 
   viewLon: 18,
   cursor: { lat: 0, lon: 0, altitude: 0 },
   pointerOverGlobe: false,
+  showHover: false,
   hover: null,
   activePanel: null,
   cinematic: false,
@@ -86,6 +97,11 @@ export const useEarthStore = create<EarthExplorerState & Actions>((set, get) => 
   setCursor: (cursor, over) =>
     set({ cursor, pointerOverGlobe: over ?? true }),
   setHover: (hover) => set({ hover }),
+  toggleShowHover: () =>
+    set((state) => {
+      const showHover = !state.showHover;
+      return { showHover, hover: showHover ? state.hover : null };
+    }),
   setZoom: (zoom) => set({ zoom }),
   setCameraDistance: (cameraDistance) => set({ cameraDistance }),
   setHeading: (heading) => set({ heading }),
@@ -113,21 +129,23 @@ export const useEarthStore = create<EarthExplorerState & Actions>((set, get) => 
       },
     })),
   setReliefExaggeration: (reliefExaggeration) => set({ reliefExaggeration }),
+  setViewTilt: (viewTilt) => set({ viewTilt }),
   setShowAltitude: (showAltitude) => set({ showAltitude }),
   setShowPeaks: (showPeaks) => set({ showPeaks }),
   setShowDepths: (showDepths) => set({ showDepths }),
   selectLocation: (selectedLocation) =>
     set({ selectedLocation, detailOpen: false }),
   setDetailOpen: (detailOpen) => set({ detailOpen }),
-  flyTo: (lat, lon, zoom = 4) =>
-    set((state) => ({
+  flyTo: (lat, lon, zoom = 4, keepDistance = false) =>
+    set({
       flyTarget: {
         lat,
         lon,
         zoom,
-        token: (state.flyTarget?.token ?? 0) + 1,
+        token: nextFlyToken(),
+        keepDistance,
       },
-    })),
+    }),
   clearFlyTarget: () => set({ flyTarget: null }),
   setCinematic: (cinematic) => set({ cinematic, activePanel: cinematic ? null : get().activePanel }),
   toggleCinematic: () => {
@@ -145,10 +163,14 @@ export const useEarthStore = create<EarthExplorerState & Actions>((set, get) => 
         lat: 15,
         lon: 10,
         zoom: 0,
-        token: (state.flyTarget?.token ?? 0) + 1,
+        token: nextFlyToken(),
       },
       selectedLocation: null,
       detailOpen: false,
       dataset: null,
+      reliefMode: "normal",
+      reliefExaggeration: 1,
+      viewTilt: 0,
+      layers: { ...state.layers, relief: true },
     })),
 }));

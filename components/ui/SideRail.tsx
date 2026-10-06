@@ -1,30 +1,13 @@
 "use client";
 
-import {
-  ChartColumn,
-  ChevronLeft,
-  Cloud,
-  Droplets,
-  Globe,
-  Layers,
-  Mountain,
-  Thermometer,
-  Users,
-} from "lucide-react";
+import { ChevronLeft, Mountain } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { PanelId } from "@/types";
 import { useEarthStore } from "@/store/earthStore";
 import { useCompact } from "@/components/ui/useChrome";
 
 const ITEMS: { id: PanelId; icon: LucideIcon; label: string }[] = [
-  { id: "globe", icon: Globe, label: "Globe" },
-  { id: "layers", icon: Layers, label: "Couches" },
-  { id: "data", icon: ChartColumn, label: "Données" },
   { id: "terrain", icon: Mountain, label: "Relief" },
-  { id: "climate", icon: Cloud, label: "Climat" },
-  { id: "temperature", icon: Thermometer, label: "Température" },
-  { id: "population", icon: Users, label: "Population" },
-  { id: "hydro", icon: Droplets, label: "Hydrographie" },
 ];
 
 export function SideRail() {

@@ -12,6 +12,7 @@ export function HeatmapLayer() {
   useEffect(() => {
     if (!dataset) {
       heatPixels.fill(0);
+      earthRefs.heatEpoch += 1;
       if (earthRefs.heat) earthRefs.heat.needsUpdate = true;
       return;
     }
@@ -31,7 +32,10 @@ export function HeatmapLayer() {
           const source = (HEAT_HEIGHT - 1 - y) * row;
           heatPixels.set(pixels.data.subarray(source, source + row), y * row);
         }
-        if (earthRefs.heat) earthRefs.heat.needsUpdate = true;
+        earthRefs.heatEpoch += 1;
+        const live = earthRefs.material?.uniforms.uHeat?.value;
+        const texture = live && "needsUpdate" in live ? live : earthRefs.heat;
+        if (texture) texture.needsUpdate = true;
       });
     return () => {
       alive = false;

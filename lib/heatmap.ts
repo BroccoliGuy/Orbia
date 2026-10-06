@@ -1,7 +1,16 @@
 import { feature } from "topojson-client";
 import type { Feature, FeatureCollection, Geometry } from "geojson";
 import type { Topology, GeometryCollection } from "topojson-specification";
-import { countryRecord, datasetValue, hasCountryData } from "@/data/countries";
+import {
+  climateGroup,
+  countryRecord,
+  datasetNumbers,
+  datasetPosition,
+  datasetScale,
+  datasetValue,
+  hasCountryData,
+  KOPPEN_GROUPS,
+} from "@/data/countries";
 import type { Dataset } from "@/types";
 
 type CountryFeature = Feature<Geometry, { name?: string }> & { id?: string | number };
@@ -69,33 +78,48 @@ export function paintHeatmap(
     topology,
     topology.objects.countries as GeometryCollection,
   ) as unknown as FeatureCollection;
-  const valued = collection.features
-    .map((item) => {
-      const id = String((item as CountryFeature).id ?? "");
-      const name = item.properties?.name ?? id;
-      const record = countryRecord(id, name);
-      return { item, id, value: hasCountryData(id) ? datasetValue(record, dataset) : null };
-    })
-    .filter((item) => item.value !== null && item.value !== 0);
-  const numbers = valued.map((item) => item.value as number);
-  const min = Math.min(...numbers);
-  const max = Math.max(...numbers);
-  const span = max - min || 1;
+  const features = collection.features.map((item) => {
+    const id = String((item as CountryFeature).id ?? "");
+    const name = item.properties?.name ?? id;
+    const record = hasCountryData(id) ? countryRecord(id, name) : null;
+    return { item, record };
+  });
 
-  for (const entry of valued) {
-    const t = dataset === "population" || dataset === "precipitation"
-      ? Math.log10(Math.max(1, entry.value as number)) / Math.log10(Math.max(10, max))
-      : ((entry.value as number) - min) / span;
-    const [r, g, b] = colorAt(t);
+  if (dataset === "koppen") {
+    for (const entry of features) {
+      if (!entry.record) continue;
+      const group = climateGroup(entry.record);
+      const swatch = KOPPEN_GROUPS.find((item) => item.id === group);
+      if (!swatch) continue;
+      context.fillStyle = `${swatch.color}b8`;
+      paintGeometry(context, entry.item.geometry, width, height);
+    }
+    return;
+  }
+
+  const scale = datasetScale(dataset, datasetNumbers(dataset));
+  for (const entry of features) {
+    if (!entry.record) continue;
+    const value = datasetValue(entry.record, dataset);
+    if (value === 0) continue;
+    const [r, g, b] = colorAt(datasetPosition(dataset, value, scale));
     context.fillStyle = `rgba(${r}, ${g}, ${b}, 0.72)`;
-    const geometry = entry.item.geometry;
-    if (!geometry) continue;
-    if (geometry.type === "Polygon") {
-      for (const ring of geometry.coordinates) drawRing(context, ring, width, height);
-    } else if (geometry.type === "MultiPolygon") {
-      for (const polygon of geometry.coordinates) {
-        for (const ring of polygon) drawRing(context, ring, width, height);
-      }
+    paintGeometry(context, entry.item.geometry, width, height);
+  }
+}
+
+function paintGeometry(
+  context: CanvasRenderingContext2D,
+  geometry: Geometry | null,
+  width: number,
+  height: number,
+) {
+  if (!geometry) return;
+  if (geometry.type === "Polygon") {
+    for (const ring of geometry.coordinates) drawRing(context, ring, width, height);
+  } else if (geometry.type === "MultiPolygon") {
+    for (const polygon of geometry.coordinates) {
+      for (const ring of polygon) drawRing(context, ring, width, height);
     }
   }
 }

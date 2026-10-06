@@ -1,4 +1,16 @@
+import worldCountries from "@/data/world-countries.json";
 import type { CountryRecord, Dataset } from "@/types";
+
+export interface WorldCountry extends CountryRecord {
+  capitalLat: number;
+  capitalLon: number;
+  lat: number;
+  lon: number;
+}
+
+export const WORLD_COUNTRIES = worldCountries as WorldCountry[];
+
+const GENERATED: Record<string, WorldCountry> = Object.fromEntries(WORLD_COUNTRIES.map((country) => [country.id, country]));
 
 const KNOWN: Record<string, CountryRecord> = {
   "156": stat("156", "CN", "Chine", "Asie", "Pékin", 1412e6, 147, 0.0, 39, 9597000, 7.5, 645, 64, "Cwa", 0, 8849, 1840),
@@ -79,7 +91,8 @@ function stat(
 
 export function countryRecord(id: string, fallbackName = "Région") {
   return (
-    KNOWN[id] ?? {
+    KNOWN[id] ??
+    GENERATED[id] ?? {
       ...stat(id, "", fallbackName, "", "", 0, 0, 0, 0, 0, 0, 0, 0, "", 0, 0, 0),
       name: fallbackName,
     }
@@ -87,7 +100,55 @@ export function countryRecord(id: string, fallbackName = "Région") {
 }
 
 export function hasCountryData(id: string) {
-  return Boolean(KNOWN[id]);
+  return Boolean(KNOWN[id] || GENERATED[id]);
+}
+
+export function countryIdByCode(code: string) {
+  const needle = code.toLowerCase();
+  return WORLD_COUNTRIES.find((country) => country.iso2.toLowerCase() === needle)?.id ?? null;
+}
+
+const DATASET_META: Record<Dataset, { title: string; unit: string }> = {
+  population: { title: "Population", unit: "habitants" },
+  density: { title: "Densité", unit: "hab. / km²" },
+  growth: { title: "Croissance", unit: "% / an" },
+  medianAge: { title: "Âge médian", unit: "années" },
+  temperature: { title: "Température", unit: "°C" },
+  precipitation: { title: "Précipitations", unit: "mm / an" },
+  humidity: { title: "Humidité", unit: "%" },
+  koppen: { title: "Köppen", unit: "classe" },
+  elevation: { title: "Altitude", unit: "m" },
+};
+
+export const KOPPEN_GROUPS = [
+  { id: "A", label: "Tropical", color: "#ff5a4a" },
+  { id: "B", label: "Sec", color: "#e2b15a" },
+  { id: "C", label: "Tempéré", color: "#3dbe7a" },
+  { id: "D", label: "Continental", color: "#20bfff" },
+  { id: "E", label: "Polaire", color: "#d5e7f5" },
+] as const;
+
+export type KoppenGroup = (typeof KOPPEN_GROUPS)[number]["id"];
+
+export function datasetTitle(dataset: Dataset) {
+  return DATASET_META[dataset].title;
+}
+
+export function datasetUnit(dataset: Dataset) {
+  return DATASET_META[dataset].unit;
+}
+
+export function climateGroup(record: CountryRecord): KoppenGroup | null {
+  const letter = record.climateClass.trim().charAt(0).toUpperCase();
+  if (letter === "A" || letter === "B" || letter === "C" || letter === "D" || letter === "E") return letter;
+  return null;
+}
+
+export function presentKoppenGroups() {
+  const present = new Set(
+    WORLD_COUNTRIES.map((country) => climateGroup(countryRecord(country.id))).filter((group) => group !== null),
+  );
+  return KOPPEN_GROUPS.filter((group) => present.has(group.id));
 }
 
 export function datasetValue(record: CountryRecord, dataset: Dataset) {
@@ -106,13 +167,79 @@ export function datasetValue(record: CountryRecord, dataset: Dataset) {
       return record.precipitation;
     case "humidity":
       return record.humidity;
-    case "koppen":
-      return record.climateClass.startsWith("A") ? 1 : record.climateClass.startsWith("B") ? 0.45 : record.climateClass.startsWith("C") ? 0.7 : 0.2;
     case "elevation":
       return record.averageElevation;
+    case "koppen":
+      return 0;
     default:
       return 0;
   }
+}
+
+export function datasetNumbers(dataset: Dataset) {
+  if (dataset === "koppen") return [];
+  return WORLD_COUNTRIES.map((country) => datasetValue(countryRecord(country.id), dataset)).filter((value) => value !== 0);
+}
+
+function formatDatasetNumber(dataset: Dataset, value: number, withUnit: boolean) {
+  const number = (digits: number) => value.toLocaleString("fr-FR", { maximumFractionDigits: digits });
+  switch (dataset) {
+    case "population":
+      return formatPeople(Math.round(value));
+    case "density":
+      return withUnit ? `${Math.round(value).toLocaleString("fr-FR")} hab./km²` : Math.round(value).toLocaleString("fr-FR");
+    case "growth":
+      return withUnit ? `${number(1)} %` : number(1);
+    case "medianAge":
+      return withUnit ? `${Math.round(value).toLocaleString("fr-FR")} ans` : Math.round(value).toLocaleString("fr-FR");
+    case "temperature":
+      return withUnit ? `${number(1)} °C` : number(1);
+    case "precipitation":
+      return withUnit ? `${Math.round(value).toLocaleString("fr-FR")} mm` : Math.round(value).toLocaleString("fr-FR");
+    case "humidity":
+      return withUnit ? `${Math.round(value).toLocaleString("fr-FR")} %` : Math.round(value).toLocaleString("fr-FR");
+    case "elevation":
+      return withUnit ? `${Math.round(value).toLocaleString("fr-FR")} m` : Math.round(value).toLocaleString("fr-FR");
+    default:
+      return "";
+  }
+}
+
+export function formatDataset(record: CountryRecord, dataset: Dataset) {
+  if (dataset === "koppen") return record.climateClass || "—";
+  return formatDatasetNumber(dataset, datasetValue(record, dataset), true);
+}
+
+export function datasetScale(dataset: Dataset, values: number[]) {
+  const numbers = values.filter((value) => Number.isFinite(value));
+  const unit = datasetUnit(dataset);
+  if (numbers.length === 0) {
+    return { min: 0, max: 0, low: "—", mid: "—", high: "—", unit };
+  }
+  const min = Math.min(...numbers);
+  const max = Math.max(...numbers);
+  const span = max - min || 1;
+  const logarithmic = dataset === "population" || dataset === "precipitation";
+  const at = (t: number) => {
+    if (logarithmic) return 10 ** (t * Math.log10(Math.max(10, max)));
+    return min + t * span;
+  };
+  return {
+    min,
+    max,
+    low: formatDatasetNumber(dataset, at(0), false),
+    mid: formatDatasetNumber(dataset, at(0.5), false),
+    high: formatDatasetNumber(dataset, at(1), false),
+    unit,
+  };
+}
+
+export function datasetPosition(dataset: Dataset, value: number, scale: { min: number; max: number }) {
+  if (dataset === "population" || dataset === "precipitation") {
+    return Math.log10(Math.max(1, value)) / Math.log10(Math.max(10, scale.max));
+  }
+  const span = scale.max - scale.min || 1;
+  return (value - scale.min) / span;
 }
 
 export function formatPeople(value: number) {

@@ -1,43 +1,30 @@
 "use client";
 
-import { Stars } from "@react-three/drei";
 import { Canvas } from "@react-three/fiber";
 import { LinearSRGBColorSpace, NoToneMapping } from "three";
 import { latLonToVector3 } from "@/lib/geo";
 import { subsolar } from "@/lib/sun";
 import { useEarthStore } from "@/store/earthStore";
 import { Atmosphere } from "./Atmosphere";
-import { Borders } from "./Borders";
 import { CameraRig, useGlobeShift } from "./CameraRig";
 import { Clouds } from "./Clouds";
 import { Earth } from "./Earth";
-import { HeatmapLayer } from "./HeatmapLayer";
-import { Markers } from "./Markers";
+import { PlacePin } from "./PlacePin";
+import { SelectedRiver } from "./SelectedRiver";
 import { ProjectionMorph } from "./ProjectionMorph";
 
 function GlobeContents() {
-  const reducedMotion = useEarthStore((state) => state.reducedMotion);
   const globe = useEarthStore((state) => state.projection) === "globe";
   useGlobeShift();
   return (
     <>
-      <color attach="background" args={["#02050a"]} />
-      <Stars
-        radius={50}
-        depth={30}
-        count={1800}
-        factor={2.2}
-        fade
-        speed={reducedMotion ? 0 : 0.15}
-      />
       <group name="globe-root">
         <Earth />
         {globe ? <Clouds /> : null}
         {globe ? <Atmosphere /> : null}
-        {globe ? <Borders /> : null}
-        {globe ? <Markers /> : null}
+        <PlacePin />
+        <SelectedRiver />
       </group>
-      <HeatmapLayer />
       <ProjectionMorph />
       <CameraRig />
     </>
@@ -54,12 +41,13 @@ export default function GlobeScene() {
       dpr={[1, 1.75]}
       gl={{
         antialias: true,
-        alpha: false,
+        alpha: true,
         toneMapping: NoToneMapping,
         outputColorSpace: LinearSRGBColorSpace,
         powerPreference: "high-performance",
       }}
-      style={{ width: "100%", height: "100%" }}
+      onCreated={({ gl }) => gl.setClearColor(0x000000, 0)}
+      style={{ width: "100%", height: "100%", touchAction: "none" }}
     >
       <GlobeContents />
     </Canvas>

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { BufferGeometry, Float32BufferAttribute, LineBasicMaterial } from "three";
 import { useEarthStore } from "@/store/earthStore";
+import { MorphedLines } from "./MorphedLines";
 
 function useLineGeometry(url: string | null, mode: "borders" | "coasts") {
   const [geometry, setGeometry] = useState<BufferGeometry | null>(null);
@@ -49,8 +50,12 @@ export function Borders() {
 
   return (
     <>
-      {borderGeometry ? <lineSegments geometry={borderGeometry} material={borderMaterial} /> : null}
-      {coastGeometry ? <lineSegments geometry={coastGeometry} material={coastMaterial} /> : null}
+      {borderGeometry ? (
+        <MorphedLines positions={borderGeometry.getAttribute("position").array as Float32Array} material={borderMaterial} />
+      ) : null}
+      {coastGeometry ? (
+        <MorphedLines positions={coastGeometry.getAttribute("position").array as Float32Array} material={coastMaterial} />
+      ) : null}
     </>
   );
 }

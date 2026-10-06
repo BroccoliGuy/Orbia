@@ -1,6 +1,6 @@
 "use client";
 
-import { Crosshair, LayoutGrid, Maximize, Minus, Plus } from "lucide-react";
+import { Crosshair, Maximize, Minus, Plus } from "lucide-react";
 import { ZOOM_DISTANCES, ZOOM_LABELS } from "@/lib/zoom";
 import { useEarthStore } from "@/store/earthStore";
 
@@ -12,9 +12,6 @@ export function ZoomControls() {
   const viewLon = useEarthStore((state) => state.viewLon);
   const flyTo = useEarthStore((state) => state.flyTo);
   const resetView = useEarthStore((state) => state.resetView);
-  const projection = useEarthStore((state) => state.projection);
-  const setProjection = useEarthStore((state) => state.setProjection);
-  const togglePanel = useEarthStore((state) => state.togglePanel);
   const percent = Math.max(40, Math.min(320, Math.round((ZOOM_DISTANCES[0] / distance) * 100)));
 
   function step(direction: -1 | 1) {
@@ -63,18 +60,6 @@ export function ZoomControls() {
           className="glass grid h-9 w-9 place-items-center rounded-full"
         >
           <Maximize size={15} strokeWidth={1.5} />
-        </button>
-        <button
-          type="button"
-          aria-label="Projection"
-          aria-pressed={projection !== "globe"}
-          onClick={() => {
-            if (projection === "globe") setProjection("mercator");
-            togglePanel("globe");
-          }}
-          className="glass grid h-9 w-9 place-items-center rounded-full"
-        >
-          <LayoutGrid size={15} strokeWidth={1.5} />
         </button>
       </div>
     </>
